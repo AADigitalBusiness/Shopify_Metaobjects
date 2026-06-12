@@ -1480,6 +1480,273 @@ class ShopifyMetaobjectLoader:
             logger.error(f"Failed to delete metafield: {str(e)}")
             raise
 
+    def update_metaobject_definition(
+        self,
+        definition_id: str,
+        field_operations: List[Dict[str, Any]],
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> Optional[MetaobjectDefinition]:
+        """
+        Update an existing metaobject definition.
+
+        Each entry in field_operations must contain exactly one of:
+          - "create": {key, name, type, description?, required?, validations?}
+          - "update": {key, name?, description?, required?, validations?}
+          - "delete": {key}
+
+        Args:
+            definition_id: GID of the definition, e.g. "gid://shopify/MetaobjectDefinition/578408816"
+            field_operations: List of field operation dicts (create / update / delete).
+            name: Optional new display name for the definition.
+            description: Optional new description for the definition.
+
+        Returns:
+            Optional[MetaobjectDefinition]: The updated definition on success, None on error.
+
+        Raises:
+            requests.RequestException: If the HTTP request fails.
+        """
+        mutation = """
+        mutation updateMetaobjectDefinition($id: ID!, $definition: MetaobjectDefinitionUpdateInput!) {
+            metaobjectDefinitionUpdate(id: $id, definition: $definition) {
+                metaobjectDefinition {
+                    id
+                    type
+                    name
+                    description
+                    fieldDefinitions {
+                        key
+                        name
+                        type {
+                            name
+                        }
+                        description
+                        required
+                        validations {
+                            name
+                            value
+                        }
+                    }
+                }
+                userErrors {
+                    field
+                    message
+                    code
+                }
+            }
+        }
+        """
+
+        definition_input: Dict[str, Any] = {"fieldDefinitions": field_operations}
+        if name is not None:
+            definition_input["name"] = name
+        if description is not None:
+            definition_input["description"] = description
+
+        variables = {"id": definition_id, "definition": definition_input}
+
+        try:
+            response = requests.post(
+                self.base_url,
+                json={"query": mutation, "variables": variables},
+                headers=self.headers,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            if "errors" in data:
+                logger.error(f"GraphQL errors: {data['errors']}")
+                return None
+
+            result = data.get("data", {}).get("metaobjectDefinitionUpdate", {})
+            if result.get("userErrors"):
+                logger.error(f"User errors: {result['userErrors']}")
+                return None
+
+            return result.get("metaobjectDefinition")
+
+        except requests.RequestException as e:
+            logger.error(f"Failed to update metaobject definition: {str(e)}")
+            raise
+
+    def delete_metaobject(self, metaobject_id: str) -> bool:
+        """
+        Delete a single metaobject by its GID.
+
+        Args:
+            metaobject_id: GID of the metaobject, e.g. "gid://shopify/Metaobject/123456".
+
+        Returns:
+            bool: True if deleted successfully, False otherwise.
+
+        Raises:
+            requests.RequestException: If the HTTP request fails.
+        """
+        mutation = """
+        mutation deleteMetaobject($id: ID!) {
+            metaobjectDelete(id: $id) {
+                deletedId
+                userErrors {
+                    field
+                    message
+                    code
+                }
+            }
+        }
+        """
+
+        variables = {"id": metaobject_id}
+
+        try:
+            response = requests.post(
+                self.base_url,
+                json={"query": mutation, "variables": variables},
+                headers=self.headers,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            if "errors" in data:
+                logger.error(f"GraphQL errors: {data['errors']}")
+                return False
+
+            result = data.get("data", {}).get("metaobjectDelete", {})
+            if result.get("userErrors"):
+                logger.error(f"User errors: {result['userErrors']}")
+                return False
+
+            return bool(result.get("deletedId"))
+
+        except requests.RequestException as e:
+            logger.error(f"Failed to delete metaobject: {str(e)}")
+            raise
+
+    def delete_metaobject_definition(self, definition_id: str) -> bool:
+        """
+        Delete a metaobject definition and ALL its associated metaobjects.
+
+        Warning: This is irreversible. All metaobjects of that type are deleted together
+        with the definition.
+
+        Args:
+            definition_id: GID of the definition, e.g. "gid://shopify/MetaobjectDefinition/578408816".
+
+        Returns:
+            bool: True if deleted successfully, False otherwise.
+
+        Raises:
+            requests.RequestException: If the HTTP request fails.
+        """
+        mutation = """
+        mutation deleteMetaobjectDefinition($id: ID!) {
+            metaobjectDefinitionDelete(id: $id) {
+                deletedId
+                userErrors {
+                    field
+                    message
+                    code
+                }
+            }
+        }
+        """
+
+        variables = {"id": definition_id}
+
+        try:
+            response = requests.post(
+                self.base_url,
+                json={"query": mutation, "variables": variables},
+                headers=self.headers,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            if "errors" in data:
+                logger.error(f"GraphQL errors: {data['errors']}")
+                return False
+
+            result = data.get("data", {}).get("metaobjectDefinitionDelete", {})
+            if result.get("userErrors"):
+                logger.error(f"User errors: {result['userErrors']}")
+                return False
+
+            return bool(result.get("deletedId"))
+
+        except requests.RequestException as e:
+            logger.error(f"Failed to delete metaobject definition: {str(e)}")
+            raise
+
+    def bulk_delete_metaobjects(
+        self,
+        metaobject_type: str,
+        handles: Optional[List[str]] = None,
+    ) -> Optional[str]:
+        """
+        Delete metaobjects in bulk using an async job.
+
+        When handles is None, ALL metaobjects of metaobject_type are deleted.
+        When handles is provided, only those specific handles are targeted.
+
+        Args:
+            metaobject_type: The type identifier of metaobjects to delete.
+            handles: Optional list of handles to restrict deletion.
+
+        Returns:
+            Optional[str]: The bulk job ID on success, None on error.
+                           Poll the job ID with the Shopify Jobs API to track progress.
+
+        Raises:
+            requests.RequestException: If the HTTP request fails.
+        """
+        mutation = """
+        mutation bulkDeleteMetaobjects($where: MetaobjectBulkDeleteWhereCondition!) {
+            metaobjectBulkDelete(where: $where) {
+                job {
+                    id
+                    done
+                }
+                userErrors {
+                    field
+                    message
+                    code
+                }
+            }
+        }
+        """
+
+        where: Dict[str, Any] = {"type": metaobject_type}
+        if handles is not None:
+            where["handles"] = handles
+
+        variables = {"where": where}
+
+        try:
+            response = requests.post(
+                self.base_url,
+                json={"query": mutation, "variables": variables},
+                headers=self.headers,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            if "errors" in data:
+                logger.error(f"GraphQL errors: {data['errors']}")
+                return None
+
+            result = data.get("data", {}).get("metaobjectBulkDelete", {})
+            if result.get("userErrors"):
+                logger.error(f"User errors: {result['userErrors']}")
+                return None
+
+            job = result.get("job", {})
+            return job.get("id")
+
+        except requests.RequestException as e:
+            logger.error(f"Failed to bulk delete metaobjects: {str(e)}")
+            raise
+
+
 def main():
     """Example usage of the ShopifyMetaobjectLoader class."""
     # Load environment variables
