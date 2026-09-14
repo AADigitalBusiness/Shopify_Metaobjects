@@ -91,6 +91,58 @@ def test_upsert_user_errors_are_structured_not_raised():
     assert result.error_code == "metaobject_user_errors"
 
 
+def test_upsert_missing_metaobject_id_is_failure():
+    transport = FakeTransport(
+        [
+            GraphQLResponse(
+                data={
+                    "metaobjectUpsert": {
+                        "metaobject": None,
+                        "userErrors": [],
+                    }
+                }
+            )
+        ]
+    )
+    client = MetaobjectClient(transport)
+    result = client.upsert(
+        metaobject_type="plt_editorial_article",
+        handle="x",
+        fields={"title": "t"},
+    )
+    assert result.ok is False
+    assert result.gid is None
+    assert result.error_code == "missing_metaobject_result"
+    assert result.retryable is False
+
+
+def test_upsert_metaobject_without_id_is_failure():
+    transport = FakeTransport(
+        [
+            GraphQLResponse(
+                data={
+                    "metaobjectUpsert": {
+                        "metaobject": {
+                            "handle": "x",
+                            "type": "plt_editorial_article",
+                            "fields": [],
+                        },
+                        "userErrors": [],
+                    }
+                }
+            )
+        ]
+    )
+    client = MetaobjectClient(transport)
+    result = client.upsert(
+        metaobject_type="plt_editorial_article",
+        handle="x",
+        fields={"title": "t"},
+    )
+    assert result.ok is False
+    assert result.error_code == "missing_metaobject_result"
+
+
 def test_upsert_propagates_retryable_transport_failure():
     transport = FakeTransport(
         [

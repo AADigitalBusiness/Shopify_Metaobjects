@@ -99,11 +99,22 @@ class MetaobjectClient:
 
         node = payload.get("metaobject") or {}
         mo = Metaobject.from_shopify_data(node) if node else None
+        if mo is None or not mo.id:
+            return MetaobjectUpsertResult(
+                ok=False,
+                type=metaobject_type,
+                handle=handle,
+                user_errors=[],
+                retryable=False,
+                error_code="missing_metaobject_result",
+                detail="metaobjectUpsert returned no metaobject id",
+                metaobject=mo,
+            )
         return MetaobjectUpsertResult(
             ok=True,
-            gid=(mo.id if mo else None),
-            type=(mo.type if mo else metaobject_type),
-            handle=(mo.handle if mo else handle),
+            gid=mo.id,
+            type=mo.type or metaobject_type,
+            handle=mo.handle or handle,
             user_errors=[],
             retryable=False,
             metaobject=mo,
