@@ -1,10 +1,17 @@
-# Unit tests for utils module
-import unittest
-from shopify_metaobjects.utils import *
+from shopify_metaobjects.errors import ValidationError
+from shopify_metaobjects.validation import validate_fields_against_definition
 
-class TestUtils(unittest.TestCase):
-    def test_placeholder(self):
-        self.assertTrue(True)
 
-if __name__ == "__main__":
-    unittest.main()
+def test_validate_allowed_keys():
+    validate_fields_against_definition(
+        [{"key": "title", "value": "x"}],
+        allowed_keys=["title", "body"],
+    )
+    try:
+        validate_fields_against_definition(
+            [{"key": "nope", "value": "x"}],
+            allowed_keys=["title"],
+        )
+        assert False, "expected ValidationError"
+    except ValidationError:
+        pass

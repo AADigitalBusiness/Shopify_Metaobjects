@@ -1,10 +1,16 @@
-# Unit tests for metaobject module
-import unittest
-from shopify_metaobjects import Metaobject
+from shopify_metaobjects.models import Metaobject
 
-class TestMetaobject(unittest.TestCase):
-    def test_placeholder(self):
-        self.assertTrue(True)
 
-if __name__ == "__main__":
-    unittest.main()
+def test_metaobject_roundtrip_fields():
+    mo = Metaobject(type="t", handle="h", fields={"title": "Hello"})
+    assert mo.to_shopify_fields() == [{"key": "title", "value": "Hello"}]
+    restored = Metaobject.from_shopify_data(
+        {
+            "id": "gid://shopify/Metaobject/1",
+            "type": "t",
+            "handle": "h",
+            "fields": [{"key": "title", "value": "Hello"}],
+        }
+    )
+    assert restored.id.endswith("/1")
+    assert restored.fields["title"] == "Hello"

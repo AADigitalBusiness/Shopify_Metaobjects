@@ -1,53 +1,66 @@
-# Loader module: main interface for metaobject operations
-# To be populated with logic from shopify_metaobject_loader.py
+"""Deprecated compatibility facade for ShopifyMetaobjectLoader."""
 
-import pandas as pd
-import requests
-from dotenv import load_dotenv
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from datetime import datetime
-import json
-from pathlib import Path
-from .metaobject import Metaobject
-from .utils import (
-    ShopifyAPIError, ShopifyRateLimitError, ShopifyUserError,
-    MetaobjectFieldDefinition, MetaobjectDefinition
-)
-from .api import make_graphql_request
+from __future__ import annotations
+
+import warnings
+from typing import Any
+
+from shopify_metaobjects.client import MetaobjectClient
+from shopify_metaobjects.models import Metaobject
+
 
 class ShopifyMetaobjectLoader:
+    """Deprecated: prefer MetaobjectClient(transport=...).
+
+    This facade uses StandaloneShopifyTransport and delegates upsert/fetch.
     """
-    A class to handle loading data from CSV files into Shopify metaobjects.
-    This class manages the entire process of reading CSV data and upserting it into
-    Shopify metaobjects using the GraphQL API. It handles both creation and updates
-    of metaobjects based on a unique handle field.
-    Attributes:
-        shop_domain (str): The Shopify store domain
-        access_token (str): The Shopify Admin API access token
-        api_version (str): The Shopify API version to use
-        headers (Dict[str, str]): Headers for API requests
-        base_url (str): Base URL for Shopify GraphQL API
-        cache_dir (Path): Directory for caching API responses
-    """
+
     def __init__(
         self,
         shop_domain: str,
         access_token: str,
         api_version: str = "2025-04",
-        cache_dir: str = None
+        cache_dir: str | None = None,
     ) -> None:
+        warnings.warn(
+            "ShopifyMetaobjectLoader is deprecated; use MetaobjectClient with an "
+            "explicit GraphQLTransport (StandaloneShopifyTransport or DjangoShopifyTransport).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        from shopify_metaobjects.transports.standalone import StandaloneShopifyTransport
+
         self.shop_domain = shop_domain
         self.access_token = access_token
         self.api_version = api_version
-        self.headers = {
-            'X-Shopify-Access-Token': self.access_token,
-            'Content-Type': 'application/json',
-        }
-        self.base_url = f"https://{self.shop_domain}/admin/api/{self.api_version}/graphql.json"
-        self.cache_dir = Path(cache_dir) if cache_dir else None
-        if self.cache_dir:
-            self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.cache_dir = cache_dir
+        self._client = MetaobjectClient(
+            StandaloneShopifyTransport(
+                shop_domain=shop_domain,
+                access_token=access_token,
+                api_version=api_version,
+            )
+        )
 
-    # ...all methods from ShopifyMetaobjectLoader in shopify_metaobject_loader.py...
-    # (batch_upsert_metaobjects, export_metaobjects_to_csv, validate_metaobject_definition, etc.)
-    # ...copy all logic, updating any internal references as needed...
+    def upsert_metaobject(self, metaobject: Metaobject) -> Metaobject | None:
+        result = self._client.upsert(
+            metaobject_type=metaobject.type,
+            handle=metaobject.handle,
+            fields=metaobject.fields,
+        )
+        return result.metaobject if result.ok else None
+
+    def fetch_metaobject_by_handle(self, handle: str, metaobject_type: str) -> Metaobject | None:
+        return self._client.get_by_handle(metaobject_type=metaobject_type, handle=handle)
+
+    def process_csv(self, file_path: str, metaobject_type: str) -> dict[str, int]:
+        from shopify_metaobjects.import_export import process_csv
+
+        return process_csv(
+            self._client,
+            file_path=file_path,
+            metaobject_type=metaobject_type,
+        )
+
+    def fetch_definition(self, metaobject_type: str) -> dict[str, Any] | None:
+        return self._client.fetch_definition(metaobject_type)

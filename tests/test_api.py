@@ -1,10 +1,9 @@
-# Unit tests for api module
-import unittest
+"""api.py no longer owns HTTP; standalone transport does."""
+
 from shopify_metaobjects.api import make_graphql_request
+import pytest
 
-class TestAPI(unittest.TestCase):
-    def test_placeholder(self):
-        self.assertTrue(True)
 
-if __name__ == "__main__":
-    unittest.main()
+def test_legacy_make_graphql_request_removed():
+    with pytest.raises(RuntimeError):
+        make_graphql_request("https://example", {}, "query", {})
