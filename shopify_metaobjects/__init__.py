@@ -10,6 +10,14 @@ from shopify_metaobjects.errors import (
 )
 from shopify_metaobjects.loader import ShopifyMetaobjectLoader
 from shopify_metaobjects.models import Metaobject, MetaobjectUpsertResult
+from shopify_metaobjects.schema_reconciliation import (
+    DefinitionApplyResult,
+    DefinitionPlan,
+    DefinitionReconciler,
+    DefinitionSchema,
+    FieldSchema,
+    plan_definition,
+)
 from shopify_metaobjects.transport import GraphQLResponse, GraphQLTransport
 
 __all__ = [
@@ -24,6 +32,12 @@ __all__ = [
     "MetaobjectUserError",
     "ValidationError",
     "ShopifyMetaobjectLoader",
+    "FieldSchema",
+    "DefinitionSchema",
+    "DefinitionPlan",
+    "DefinitionApplyResult",
+    "DefinitionReconciler",
+    "plan_definition",
 ]
 
 __version__ = "0.2.0"
